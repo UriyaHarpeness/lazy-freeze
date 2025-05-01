@@ -74,9 +74,9 @@ def lazy_freeze(cls: T, *, debug: bool = False) -> T:
     # Store the original hash method
     original_hash = cls.__hash__
 
-    # Define all the mutating methods we want to protect
+    # Define core mutating methods we always want to protect
     mutating_methods = {
-        # Attribute mutation
+        # Attribute mutation (always present via object)
         '__setattr__': (object.__setattr__, 
                         lambda name, value: f"modify attribute '{name}' of"),
         '__delattr__': (object.__delattr__, 
@@ -87,24 +87,33 @@ def lazy_freeze(cls: T, *, debug: bool = False) -> T:
                         lambda key, value: f"modify item '{key}' of"),
         '__delitem__': (None,  # Will be replaced with actual method if it exists
                         lambda key: f"delete item '{key}' from"),
-        
-        # In-place operations
-        '__iadd__': (None, lambda other: f"modify with in-place addition"),
-        '__isub__': (None, lambda other: f"modify with in-place subtraction"),
-        '__imul__': (None, lambda other: f"modify with in-place multiplication"),
-        '__itruediv__': (None, lambda other: f"modify with in-place division"),
-        '__ifloordiv__': (None, lambda other: f"modify with in-place floor division"),
-        '__imod__': (None, lambda other: f"modify with in-place modulo"),
-        '__ipow__': (None, lambda other: f"modify with in-place power"),
-        '__ilshift__': (None, lambda other: f"modify with in-place left shift"),
-        '__irshift__': (None, lambda other: f"modify with in-place right shift"),
-        '__iand__': (None, lambda other: f"modify with in-place bitwise AND"),
-        '__ixor__': (None, lambda other: f"modify with in-place bitwise XOR"),
-        '__ior__': (None, lambda other: f"modify with in-place bitwise OR"),
     }
+    
+    # Define all possible in-place operations
+    inplace_operations = {
+        '__iadd__': lambda other: f"modify with in-place addition",
+        '__isub__': lambda other: f"modify with in-place subtraction",
+        '__imul__': lambda other: f"modify with in-place multiplication",
+        '__itruediv__': lambda other: f"modify with in-place division",
+        '__ifloordiv__': lambda other: f"modify with in-place floor division",
+        '__imod__': lambda other: f"modify with in-place modulo",
+        '__ipow__': lambda other: f"modify with in-place power",
+        '__ilshift__': lambda other: f"modify with in-place left shift",
+        '__irshift__': lambda other: f"modify with in-place right shift",
+        '__iand__': lambda other: f"modify with in-place bitwise AND",
+        '__ixor__': lambda other: f"modify with in-place bitwise XOR",
+        '__ior__': lambda other: f"modify with in-place bitwise OR",
+        '__imatmul__': lambda other: f"modify with in-place matrix multiplication",
+    }
+    
+    # Only add in-place operations that exist in the class
+    for op_name, error_formatter in inplace_operations.items():
+        if hasattr(cls, op_name):
+            original_method = getattr(cls, op_name)
+            mutating_methods[op_name] = (original_method, error_formatter)
 
-    # Store original methods
-    for method_name in mutating_methods:
+    # Store original methods for core operations
+    for method_name in list(mutating_methods.keys()):
         if hasattr(cls, method_name):
             mutating_methods[method_name] = (getattr(cls, method_name), 
                                             mutating_methods[method_name][1])

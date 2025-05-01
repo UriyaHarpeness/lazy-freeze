@@ -127,6 +127,30 @@ class TestLazyFreeze(unittest.TestCase):
         with self.assertRaises(TypeError):
             c -= 2
 
+    def test_non_class_application(self):
+        """Test that applying the decorator to a non-class entity raises TypeError."""
+        # Define a simple function
+        def sample_function(x):
+            return x * 2
+        
+        # Try to apply lazy_freeze to the function
+        with self.assertRaises(TypeError) as context:
+            lazy_freeze(sample_function)
+        
+        # Check that the error message is as expected
+        error_message = str(context.exception)
+        self.assertIn("@lazy_freeze can only be applied to classes", error_message)
+        self.assertIn("not function", error_message)
+        
+        # Test with a non-function, non-class entity
+        with self.assertRaises(TypeError) as context:
+            lazy_freeze(42)
+            
+        # Check error message for non-function
+        error_message = str(context.exception)
+        self.assertIn("@lazy_freeze can only be applied to classes", error_message)
+        self.assertIn("not int", error_message)
+
 
 if __name__ == '__main__':
     unittest.main()

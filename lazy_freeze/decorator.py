@@ -7,23 +7,13 @@ has been calculated.
 """
 
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, cast, overload
+from typing import Any, Callable, Dict, Type, TypeVar, cast
 
 # Type variable for the class being decorated
 T = TypeVar('T', bound=Type[object])
 
 
-@overload
-def lazy_freeze(cls: T) -> T:
-    ...
-
-
-@overload
-def lazy_freeze(cls: None = None, *, debug: bool = False) -> Callable[[T], T]:
-    ...
-
-
-def lazy_freeze(cls: Optional[T] = None, *, debug: bool = False) -> Union[T, Callable[[T], T]]:
+def lazy_freeze(cls: T, *, debug: bool = False) -> T:
     """
     Class decorator that makes an object immutable after its hash is calculated.
 
@@ -42,6 +32,7 @@ def lazy_freeze(cls: Optional[T] = None, *, debug: bool = False) -> Union[T, Cal
 
     Raises:
         AssertionError: If the class does not have a custom __hash__ method
+        TypeError: If applied to a non-class entity
 
     Example:
         @lazy_freeze
@@ -63,133 +54,119 @@ def lazy_freeze(cls: Optional[T] = None, *, debug: bool = False) -> Union[T, Cal
             def __hash__(self):
                 return hash((self.name, self.age))
     """
-    def decorator(cls: T) -> T:
-        # Check if class has a custom __hash__ method (not the one from object)
-        has_custom_hash = hasattr(
-            cls, '__hash__') and cls.__hash__ is not object.__hash__
-
-        # Assert that the class has a custom hash implementation
-        assert has_custom_hash, (
-            f"Class '{cls.__name__}' must implement a custom __hash__ method to use the @lazy_freeze decorator. "
-            f"Implement __hash__ to define the object's hash value, which should be consistent with equality (__eq__)."
+    # Check that the decorated object is a class and not a function or other entity
+    if not isinstance(cls, type):
+        raise TypeError(
+            f"@lazy_freeze can only be applied to classes, not {type(cls).__name__}. "
+            f"Got {cls} which is a {type(cls).__name__}, not a class."
         )
 
-        # Store original methods
-        original_hash = cls.__hash__
-        original_setattr = cast(Callable[[Any, str, Any], None],
-                                cls.__setattr__ if hasattr(cls, '__setattr__') else object.__setattr__)
-        original_delattr = cast(Callable[[Any, str], None],
-                                cls.__delattr__ if hasattr(cls, '__delattr__') else object.__delattr__)
-        original_setitem = cast(Optional[Callable[[Any, Any, Any], None]],
-                                cls.__setitem__ if hasattr(cls, '__setitem__') else None)
-        original_delitem = cast(Optional[Callable[[Any, Any], None]],
-                                cls.__delitem__ if hasattr(cls, '__delitem__') else None)
+    # Check if class has a custom __hash__ method (not the one from object)
+    has_custom_hash = hasattr(
+        cls, '__hash__') and cls.__hash__ is not object.__hash__
 
-        # In-place operation methods to protect
-        inplace_operations: List[str] = [
-            '__iadd__', '__isub__', '__imul__', '__itruediv__', '__ifloordiv__',
-            '__imod__', '__ipow__', '__ilshift__', '__irshift__', '__iand__',
-            '__ixor__', '__ior__'
-        ]
+    # Assert that the class has a custom hash implementation
+    assert has_custom_hash, (
+        f"Class '{cls.__name__}' must implement a custom __hash__ method to use the @lazy_freeze decorator. "
+        f"Implement __hash__ to define the object's hash value, which should be consistent with equality (__eq__)."
+    )
 
-        # Store original in-place operations
-        original_inplace: Dict[str, Callable[[Any, Any], Any]] = {}
-        for op in inplace_operations:
-            if hasattr(cls, op):
-                original_inplace[op] = getattr(cls, op)
+    # Store the original hash method
+    original_hash = cls.__hash__
 
-        def __hash__(self: Any) -> int:
-            """Calculate hash and mark the object as hash-taken. In debug mode, capture stack trace."""
-            hash_value = original_hash(self)
+    # Define all the mutating methods we want to protect
+    mutating_methods = {
+        # Attribute mutation
+        '__setattr__': (object.__setattr__, 
+                        lambda name, value: f"modify attribute '{name}' of"),
+        '__delattr__': (object.__delattr__, 
+                        lambda name: f"delete attribute '{name}' from"),
+        
+        # Item mutation (these are optional)
+        '__setitem__': (None,  # Will be replaced with actual method if it exists
+                        lambda key, value: f"modify item '{key}' of"),
+        '__delitem__': (None,  # Will be replaced with actual method if it exists
+                        lambda key: f"delete item '{key}' from"),
+        
+        # In-place operations
+        '__iadd__': (None, lambda other: f"modify with in-place addition"),
+        '__isub__': (None, lambda other: f"modify with in-place subtraction"),
+        '__imul__': (None, lambda other: f"modify with in-place multiplication"),
+        '__itruediv__': (None, lambda other: f"modify with in-place division"),
+        '__ifloordiv__': (None, lambda other: f"modify with in-place floor division"),
+        '__imod__': (None, lambda other: f"modify with in-place modulo"),
+        '__ipow__': (None, lambda other: f"modify with in-place power"),
+        '__ilshift__': (None, lambda other: f"modify with in-place left shift"),
+        '__irshift__': (None, lambda other: f"modify with in-place right shift"),
+        '__iand__': (None, lambda other: f"modify with in-place bitwise AND"),
+        '__ixor__': (None, lambda other: f"modify with in-place bitwise XOR"),
+        '__ior__': (None, lambda other: f"modify with in-place bitwise OR"),
+    }
 
-            # In debug mode, capture stack trace
-            if debug:
-                stack_trace = ''.join(traceback.format_stack()[
-                                      :-1])  # Exclude current frame
-                original_setattr(self, 'hash_taken', True)
-                original_setattr(self, '_hash_stack_trace', stack_trace)
-            else:
-                original_setattr(self, 'hash_taken', True)
+    # Store original methods
+    for method_name in mutating_methods:
+        if hasattr(cls, method_name):
+            mutating_methods[method_name] = (getattr(cls, method_name), 
+                                            mutating_methods[method_name][1])
 
-            return hash_value
+    def __hash__(self: Any) -> int:
+        """Calculate hash and mark the object as hash-taken. In debug mode, capture stack trace."""
+        hash_value = original_hash(self)
 
-        def get_error_message(self: Any, operation: str) -> str:
-            """Generate an appropriate error message based on debug mode."""
-            if debug and hasattr(self, '_hash_stack_trace'):
-                return (
-                    f"Cannot {operation} {cls.__name__} after its hash has been taken.\n"
-                    f"Hash was calculated at:\n{self._hash_stack_trace}"
-                )
-            else:
-                return f"Cannot {operation} {cls.__name__} after its hash has been taken"
+        # Use direct attribute setting to avoid recursion with __setattr__
+        object.__setattr__(self, 'hash_taken', True)
+        
+        # In debug mode, capture stack trace
+        if debug:
+            stack_trace = ''.join(traceback.format_stack()[
+                                  :-1])  # Exclude current frame
+            object.__setattr__(self, '_hash_stack_trace', stack_trace)
 
-        def __setattr__(self: Any, name: str, value: Any) -> None:
-            """Prevent attribute modification if hash has been taken."""
-            if hasattr(self, 'hash_taken') and self.hash_taken:
-                raise TypeError(get_error_message(
-                    self, f"modify attribute '{name}' of"))
-            original_setattr(self, name, value)
+        return hash_value
 
-        def __delattr__(self: Any, name: str) -> None:
-            """Prevent attribute deletion if hash has been taken."""
-            if hasattr(self, 'hash_taken') and self.hash_taken:
-                raise TypeError(get_error_message(
-                    self, f"delete attribute '{name}' from"))
-            original_delattr(self, name)
+    def get_error_message(self: Any, operation: str) -> str:
+        """Generate an appropriate error message based on debug mode."""
+        if debug and hasattr(self, '_hash_stack_trace'):
+            return (
+                f"Cannot {operation} {cls.__name__} after its hash has been taken.\n"
+                f"Hash was calculated at:\n{self._hash_stack_trace}"
+            )
+        else:
+            return f"Cannot {operation} {cls.__name__} after its hash has been taken"
 
-        def __setitem__(self: Any, key: Any, value: Any) -> None:
-            """Prevent item modification if hash has been taken."""
-            if hasattr(self, 'hash_taken') and self.hash_taken:
-                raise TypeError(get_error_message(
-                    self, f"modify item '{key}' of"))
-            if original_setitem is not None:
-                original_setitem(self, key, value)
-            else:
-                raise TypeError(
-                    f"{cls.__name__} does not support item assignment")
+    # Set the hash method
+    cls.__hash__ = __hash__
 
-        def __delitem__(self: Any, key: Any) -> None:
-            """Prevent item deletion if hash has been taken."""
-            if hasattr(self, 'hash_taken') and self.hash_taken:
-                raise TypeError(get_error_message(
-                    self, f"delete item '{key}' from"))
-            if original_delitem is not None:
-                original_delitem(self, key)
-            else:
-                raise TypeError(
-                    f"{cls.__name__} does not support item deletion")
+    # Create new methods for each mutating operation
+    for method_name, (original_method, error_formatter) in mutating_methods.items():
+        # Skip if the original method doesn't exist and it's not a core attribute method
+        if original_method is None and method_name not in ('__setattr__', '__delattr__'):
+            continue
+            
+        # Create a wrapped method that checks hash_taken
+        def make_protected_method(method_name=method_name, 
+                                  original=original_method,
+                                  format_error=error_formatter):
+            def protected_method(self: Any, *args: Any, **kwargs: Any) -> Any:
+                if hasattr(self, 'hash_taken') and self.hash_taken:
+                    # Generate the appropriate error message
+                    operation = format_error(*args)
+                    raise TypeError(get_error_message(self, operation))
+                
+                # Call the original method if it exists
+                if original is not None:
+                    return original(self, *args, **kwargs)
+                
+                # For optional methods like __setitem__, raise a TypeError if not supported
+                if method_name in ('__setitem__', '__delitem__'):
+                    raise TypeError(f"{cls.__name__} does not support {method_name[2:-2]} operations")
+                
+                # Default fallback for other methods (should not be reached in practice)
+                return None
+            
+            return protected_method
+        
+        # Set the method on the class
+        setattr(cls, method_name, make_protected_method())
 
-        # Replace methods
-        cls.__hash__ = __hash__
-        cls.__setattr__ = __setattr__
-        cls.__delattr__ = __delattr__
-
-        # Only add item methods if the class supports them
-        if hasattr(cls, '__setitem__') or original_setitem is not None:
-            cls.__setitem__ = __setitem__
-
-        if hasattr(cls, '__delitem__') or original_delitem is not None:
-            cls.__delitem__ = __delitem__
-
-        # Create and add in-place operation methods
-        for op in inplace_operations:
-            if op in original_inplace:
-                # Create a function that checks hash_taken before calling the original
-                def make_inplace_method(op_name: str, original_method: Callable[[Any, Any], Any]) \
-                        -> Callable[[Any, Any], Any]:
-                    def inplace_method(self: Any, other: Any) -> Any:
-                        if hasattr(self, 'hash_taken') and self.hash_taken:
-                            raise TypeError(get_error_message(
-                                self, f"modify with {op_name}"))
-                        return original_method(self, other)
-                    return inplace_method
-
-                # Set the method on the class
-                setattr(cls, op, make_inplace_method(op, original_inplace[op]))
-
-        return cls
-
-    # Handle both @lazy_freeze and @lazy_freeze(debug=True) syntax
-    if cls is None:
-        return decorator
-    return decorator(cls)
+    return cls

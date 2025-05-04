@@ -151,6 +151,40 @@ class TestLazyFreeze(unittest.TestCase):
         self.assertIn("@lazy_freeze can only be applied to classes", error_message)
         self.assertIn("not int", error_message)
 
+    def test_protected_attributes(self):
+        """Test that only specified attributes are protected when using protected_attrs."""
+        @lazy_freeze(protected_attrs=["name", "age"])
+        class PartialPerson:
+            def __init__(self, name: str, age: int, description: str) -> None:
+                self.name = name
+                self.age = age
+                self.description = description  # Not used in hash
+
+            def __hash__(self) -> int:
+                return hash((self.name, self.age))  # Only uses name and age
+            
+            def __eq__(self, other: object) -> bool:
+                if not isinstance(other, PartialPerson):
+                    return False
+                return self.name == other.name and self.age == other.age
+
+        # Create a person
+        p = PartialPerson("Alice", 30, "Software Engineer")
+        
+        # Take the hash
+        h = hash(p)
+        
+        # Try to modify protected attributes (should raise TypeError)
+        with self.assertRaises(TypeError):
+            p.name = "Bob"
+            
+        with self.assertRaises(TypeError):
+            p.age = 31
+            
+        # Try to modify unprotected attribute (should work)
+        p.description = "Senior Software Engineer"
+        self.assertEqual(p.description, "Senior Software Engineer")
+
 
 if __name__ == '__main__':
     unittest.main()

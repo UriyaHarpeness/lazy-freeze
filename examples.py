@@ -138,6 +138,28 @@ class DebugPerson:
         return f"DebugPerson(name='{self.name}', age={self.age})"
 
 
+# Example with protected_attrs - only specific attributes are protected
+@lazy_freeze(protected_attrs=["name", "age"])
+class PartiallyProtectedPerson:
+    """Class that demonstrates selective attribute protection."""
+
+    def __init__(self, name, age, description):
+        self.name = name
+        self.age = age
+        self.description = description  # Not used in hash, can be modified after hash
+
+    def __hash__(self):
+        return hash((self.name, self.age))  # Only uses name and age
+
+    def __eq__(self, other):
+        if not isinstance(other, PartiallyProtectedPerson):
+            return False
+        return self.name == other.name and self.age == other.age
+
+    def __repr__(self):
+        return f"PartiallyProtectedPerson(name='{self.name}', age={self.age}, description='{self.description}')"
+
+
 # Helpers for the demo
 
 def hash_object(obj):
@@ -383,6 +405,43 @@ def demonstrate_debug_mode():
         print(e)
 
 
+# New demo for protected_attrs
+def demonstrate_protected_attrs():
+    """Demonstrate the protected_attrs feature for selective attribute protection."""
+    print("\n=== Protected Attributes Example ===")
+
+    # Create a partially protected person
+    p = PartiallyProtectedPerson("Alice", 30, "Software Engineer")
+    print(f"Created: {p}")
+
+    # Modify before hash
+    p.name = "Alicia"
+    p.age = 31
+    p.description = "Senior Software Engineer"
+    print(f"Modified before hash: {p}")
+
+    # Take the hash (this will set hash_taken=True)
+    h = hash(p)
+    print(f"Hash value: {h}")
+    print(f"hash_taken attribute: {getattr(p, 'hash_taken', False)}")
+
+    # Try to modify protected attributes after hash
+    try:
+        p.name = "Bob"
+        print(f"Modified name after hash: {p}")  # This should not execute
+    except TypeError as e:
+        print(f"Exception when modifying name after hash: {e}")
+
+    try:
+        p.age = 32
+        print(f"Modified age after hash: {p}")  # This should not execute
+    except TypeError as e:
+        print(f"Exception when modifying age after hash: {e}")
+
+    # Try to modify unprotected attribute after hash - this should work
+    p.description = "Principal Software Engineer"
+    print(f"Modified description after hash: {p}")  # This should execute
+
 if __name__ == "__main__":
     demonstrate_person()
     demonstrate_dict()
@@ -391,4 +450,5 @@ if __name__ == "__main__":
     demonstrate_hash_assertion()
     demonstrate_inplace_operations()
     demonstrate_deletion()
-    demonstrate_debug_mode()  # New demo for debug mode
+    demonstrate_debug_mode()
+    demonstrate_protected_attrs()  # New demo for protected attributes

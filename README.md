@@ -78,10 +78,45 @@ except TypeError as e:
     # Output will include the stack trace from when hash(p) was called
 ```
 
+### Selective Attribute Protection
+
+If your `__hash__` implementation only depends on certain attributes, you can selectively protect only those attributes:
+
+```python
+@lazy_freeze(protected_attrs=["name", "age"])
+class PartiallyProtectedPerson:
+    def __init__(self, name, age, description):
+        self.name = name
+        self.age = age
+        self.description = description  # Not used in hash
+        
+    def __hash__(self):
+        return hash((self.name, self.age))  # Only uses name and age
+    
+    def __eq__(self, other):
+        if not isinstance(other, PartiallyProtectedPerson):
+            return False
+        return self.name == other.name and self.age == other.age
+
+# Create and hash a person
+p = PartiallyProtectedPerson("Alice", 30, "Software Engineer")
+h = hash(p)
+
+# Protected attributes cannot be modified
+try:
+    p.name = "Bob"  # This will raise TypeError
+except TypeError as e:
+    print(f"Error: {e}")
+
+# Unprotected attributes can still be modified
+p.description = "Senior Engineer"  # This works fine
+```
+
 ## Features
 
 - **Lazy immutability**: Objects remain mutable until their hash is calculated
 - **Complete protection**: Blocks attribute and item modification, deletion, and in-place operations
+- **Selective protection**: Optionally protect only specific attributes that are used in the hash calculation
 - **Preserves original behavior**: Respects any custom `__hash__` implementation
 - **Works with dictionary-like objects**: Supports classes that implement `__setitem__` and `__delitem__`
 - **Debug mode**: Captures stack traces to help identify where objects were hashed

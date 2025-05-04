@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Type, TypeVar, cast
 T = TypeVar('T', bound=Type[object])
 
 
-def lazy_freeze(cls: T, *, debug: bool = False) -> T:
+def lazy_freeze(cls: T, *, debug: bool = False, protected_attrs: list = None) -> T:
     """
     Class decorator that makes an object immutable after its hash is calculated.
 
@@ -26,6 +26,8 @@ def lazy_freeze(cls: T, *, debug: bool = False) -> T:
     Args:
         cls: The class to be decorated
         debug: If True, captures stack trace at hash time and includes it in error messages
+        protected_attrs: List of attribute names to protect after hash is taken.
+                         If None or empty, all attributes will be protected.
 
     Returns:
         The decorated class
@@ -53,6 +55,17 @@ def lazy_freeze(cls: T, *, debug: bool = False) -> T:
 
             def __hash__(self):
                 return hash((self.name, self.age))
+                
+        # With specific attributes protected
+        @lazy_freeze(protected_attrs=["name", "age"])
+        class PartiallyProtectedPerson:
+            def __init__(self, name, age, description):
+                self.name = name
+                self.age = age
+                self.description = description  # Not used in hash, can be modified
+                
+            def __hash__(self):
+                return hash((self.name, self.age))  # Only uses name and age
     """
     # Check that the decorated object is a class and not a function or other entity
     if not isinstance(cls, type):
@@ -156,6 +169,14 @@ def lazy_freeze(cls: T, *, debug: bool = False) -> T:
                                   format_error=error_formatter):
             def protected_method(self: Any, *args: Any, **kwargs: Any) -> Any:
                 if hasattr(self, 'hash_taken') and self.hash_taken:
+                    # Check if we're only protecting specific attributes
+                    if protected_attrs:
+                        # For __setattr__ and __delattr__, check if the attribute is protected
+                        if method_name == '__setattr__' or method_name == '__delattr__':
+                            attr_name = args[0] if args else None
+                            if attr_name not in protected_attrs:
+                                return original(self, *args, **kwargs)
+
                     # Generate the appropriate error message
                     operation = format_error(*args)
                     raise TypeError(get_error_message(self, operation))

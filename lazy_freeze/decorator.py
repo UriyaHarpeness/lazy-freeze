@@ -74,23 +74,21 @@ def lazy_freeze(cls: T, *, debug: bool = False) -> T:
     # Store the original hash method
     original_hash = cls.__hash__
 
-    # Define core mutating methods we always want to protect
+    # Define core attribute mutation methods (always present via object)
     mutating_methods = {
-        # Attribute mutation (always present via object)
         '__setattr__': (object.__setattr__, 
                         lambda name, value: f"modify attribute '{name}' of"),
         '__delattr__': (object.__delattr__, 
                         lambda name: f"delete attribute '{name}' from"),
-        
-        # Item mutation (these are optional)
-        '__setitem__': (None,  # Will be replaced with actual method if it exists
-                        lambda key, value: f"modify item '{key}' of"),
-        '__delitem__': (None,  # Will be replaced with actual method if it exists
-                        lambda key: f"delete item '{key}' from"),
     }
     
-    # Define all possible in-place operations
-    inplace_operations = {
+    # Define all optional mutating operations
+    optional_operations = {
+        # Item mutation operations
+        '__setitem__': lambda key, value: f"modify item '{key}' of",
+        '__delitem__': lambda key: f"delete item '{key}' from",
+        
+        # In-place operations
         '__iadd__': lambda other: f"modify with in-place addition",
         '__isub__': lambda other: f"modify with in-place subtraction",
         '__imul__': lambda other: f"modify with in-place multiplication",
@@ -106,15 +104,15 @@ def lazy_freeze(cls: T, *, debug: bool = False) -> T:
         '__imatmul__': lambda other: f"modify with in-place matrix multiplication",
     }
     
-    # Only add in-place operations that exist in the class
-    for op_name, error_formatter in inplace_operations.items():
+    # Only add optional operations that exist in the class
+    for op_name, error_formatter in optional_operations.items():
         if hasattr(cls, op_name):
             original_method = getattr(cls, op_name)
             mutating_methods[op_name] = (original_method, error_formatter)
 
-    # Store original methods for core operations
+    # Update core methods if the class has its own implementations
     for method_name in list(mutating_methods.keys()):
-        if hasattr(cls, method_name):
+        if method_name in ('__setattr__', '__delattr__') and hasattr(cls, method_name):
             mutating_methods[method_name] = (getattr(cls, method_name), 
                                             mutating_methods[method_name][1])
 

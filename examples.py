@@ -180,7 +180,7 @@ def demonstrate_list():
     print(f"Modified before hash: {cl}")
 
     # Take the hash (this will set hash_taken=True)
-    h = hash(cl)
+    hash(cl)
 
     # Try to modify after hash
     try:
@@ -227,7 +227,7 @@ def demonstrate_inherited_hash():
     child.value = 43  # This works before hash
     print(f"Modified before hash: {child}")
 
-    h = hash(child)  # This will set hash_taken
+    hash(child)  # This will set hash_taken
 
     try:
         child.value = 44
@@ -248,7 +248,7 @@ def demonstrate_inplace_operations():
     print(f"After c += 5: {c}")
 
     # Take the hash
-    h = hash(c)
+    hash(c)
 
     # Try in-place operations after hash
     try:
@@ -280,7 +280,7 @@ def demonstrate_deletion():
     print(f"After deleting 'name' item: {container.items}")
 
     # Take the hash
-    h = hash(container)
+    hash(container)
 
     # Try deletions after hash
     try:
@@ -313,7 +313,10 @@ def demonstrate_debug_mode():
 
     # Take the hash via a separate function to create a more interesting stack trace
     print("Taking hash in a separate function...")
-    h = hash(dp)
+    def helper_hash(obj: DebugPerson) -> int:
+        return hash(obj)
+
+    helper_hash(dp)
 
     # Try to modify after hash via a separate function
     print("\nAttempting to modify after hash via separate function...")

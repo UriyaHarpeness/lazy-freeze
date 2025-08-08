@@ -3,7 +3,7 @@ from typing import Any, TypeVar, overload
 from collections.abc import Callable
 
 
-T = TypeVar('T', bound=type)
+T = TypeVar('T')
 
 
 @overload
@@ -11,18 +11,22 @@ def lazy_freeze(
     cls_external: None = None,
     debug: bool = False,
     freeze_attrs: list[str] | None = None,
-) -> Callable[[T], T]: ...
+) -> Callable[[type[T]], type[T]]: ...
 
 
 @overload
 def lazy_freeze(
-    cls_external: T,
+    cls_external: type[T],
     debug: bool = False,
     freeze_attrs: list[str] | None = None,
-) -> T: ...
+) -> type[T]: ...
 
 
-def lazy_freeze(cls_external: T = None, debug: bool = False, freeze_attrs: list = None) -> T | Callable[[T], T]:
+def lazy_freeze(
+    cls_external: type[T] | None = None,
+    debug: bool = False,
+    freeze_attrs: list[str] | None = None,
+) -> type[T] | Callable[[type[T]], type[T]]:
     """
     Class decorator that makes an object immutable after its hash is calculated.
     Works only on classes, and furthermore: classes that implement or inherit __hash__.
@@ -39,7 +43,7 @@ def lazy_freeze(cls_external: T = None, debug: bool = False, freeze_attrs: list 
         freeze_attrs: List of attribute names to freeze after hash is taken.
                          If None or empty, all attributes will be frozen.
     """
-    def decorator(cls: T) -> T:
+    def decorator(cls: type[T]) -> type[T]:
         if not isinstance(cls, type):
             raise TypeError(f"@lazy_freeze can only be applied to classes. "
                             f"Got {cls} which is of type '{type(cls).__name__}'.")
@@ -60,13 +64,10 @@ def lazy_freeze(cls_external: T = None, debug: bool = False, freeze_attrs: list 
                             lambda name: f"delete attribute '{name}' from"),
         }
 
-        # Optional mutating operations, to be tested for existence
+        # Optional mutating operations, modified only if exist
         optional_ops = {
-            # Item mutation operations
             '__setitem__': lambda key, value: f"modify item '{key}' of",
             '__delitem__': lambda key: f"delete item '{key}' from",
-
-            # In-place operations
             '__iadd__': lambda other: "modify with in-place addition",
             '__isub__': lambda other: "modify with in-place subtraction",
             '__imul__': lambda other: "modify with in-place multiplication",
@@ -79,6 +80,8 @@ def lazy_freeze(cls_external: T = None, debug: bool = False, freeze_attrs: list 
             '__iand__': lambda other: "modify with in-place bitwise AND",
             '__ixor__': lambda other: "modify with in-place bitwise XOR",
             '__ior__': lambda other: "modify with in-place bitwise OR",
+
+            # numpy-specific (operator '@'), but added for completeness
             '__imatmul__': lambda other: "modify with in-place matrix multiplication",
         }
 
@@ -108,7 +111,6 @@ def lazy_freeze(cls_external: T = None, debug: bool = False, freeze_attrs: list 
             return hash_value
 
         def get_error_message(self: Any, operation: str) -> str:
-            """Generate an appropriate error message based on debug mode."""
             if debug and hasattr(self, '_hash_stack_trace'):
                 return (
                     f"Cannot {operation} {cls.__name__} after its hash has been taken.\n"

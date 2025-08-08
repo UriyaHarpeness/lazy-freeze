@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A decorator that makes objects immutable after their hash is calculated"
 readme = "README.md"
 authors = [
-    {name = "Ofek Shilon", email = "ofekshilon@example.com"}
+    {name = "Ofek Shilon", email = "ofekshilon@gmail.com"}
 ]
 license = {file = "LICENSE"}
 classifiers = [

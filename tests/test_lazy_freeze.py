@@ -1,7 +1,5 @@
-"""
-Tests for the lazy_freeze decorator.
-"""
 
+from __future__ import annotations
 import unittest
 from lazy_freeze import lazy_freeze
 
@@ -44,7 +42,6 @@ class TestLazyFreeze(unittest.TestCase):
             def __init__(self, name: str, age: int) -> None:
                 self.name = name
                 self.age = age
-                self._hash_stack_trace: str = None
 
             def __hash__(self) -> int:
                 return hash((self.name, self.age))
@@ -53,7 +50,6 @@ class TestLazyFreeze(unittest.TestCase):
         p = Person("Bob", 25)
         h = hash(p)
 
-        # Check that _hash_stack_trace is set
         self.assertTrue(hasattr(p, '_hash_stack_trace'))
 
         # Try to modify
@@ -70,12 +66,12 @@ class TestLazyFreeze(unittest.TestCase):
         class Container(dict):
             def __init__(self, **kwargs: object):
                 super().__init__(**kwargs)
-                self.name: str = None
-                self.value: int = None
+                self.name: str | None = None
+                self.value: int | None = None
                 for key, value in kwargs.items():
                     setattr(self, key, value)
 
-            def __hash__(self) -> int:
+            def __hash__(self) -> int:  # type: ignore
                 return hash(tuple(sorted(self.items())))
 
         # Create container and modify before hash
@@ -104,11 +100,11 @@ class TestLazyFreeze(unittest.TestCase):
             def __hash__(self) -> int:
                 return hash(self.value)
 
-            def __iadd__(self, other: int) -> 'Counter':
+            def __iadd__(self, other: int) -> Counter:
                 self.value += other
                 return self
 
-            def __isub__(self, other: int) -> 'Counter':
+            def __isub__(self, other: int) -> Counter:
                 self.value -= other
                 return self
 
@@ -132,37 +128,37 @@ class TestLazyFreeze(unittest.TestCase):
         # Define a simple function
         def sample_function(x):
             return x * 2
-        
+
         # Try to apply lazy_freeze to the function
         with self.assertRaises(TypeError) as context:
-            lazy_freeze(sample_function)
-        
+            lazy_freeze(sample_function)  # type: ignore
+
         # Check that the error message is as expected
         error_message = str(context.exception)
         self.assertIn("@lazy_freeze can only be applied to classes", error_message)
-        self.assertIn("not function", error_message)
-        
+        self.assertIn("is of type 'function'", error_message)
+
         # Test with a non-function, non-class entity
         with self.assertRaises(TypeError) as context:
-            lazy_freeze(42)
-            
+            lazy_freeze(42)  # type: ignore
+
         # Check error message for non-function
         error_message = str(context.exception)
         self.assertIn("@lazy_freeze can only be applied to classes", error_message)
-        self.assertIn("not int", error_message)
+        self.assertIn("is of type 'int'", error_message)
 
-    def test_protected_attributes(self):
-        """Test that only specified attributes are protected when using protected_attrs."""
-        @lazy_freeze(protected_attrs=["name", "age"])
+    def test_freeze_attributes(self):
+        """Test that only specified attributes are frozen when using freeze_attrs."""
+        @lazy_freeze(freeze_attrs=["name", "age"])
         class PartialPerson:
-            def __init__(self, name: str, age: int, description: str) -> None:
+            def __init__(self, name: str, age: int, description: str):
                 self.name = name
                 self.age = age
                 self.description = description  # Not used in hash
 
             def __hash__(self) -> int:
                 return hash((self.name, self.age))  # Only uses name and age
-            
+
             def __eq__(self, other: object) -> bool:
                 if not isinstance(other, PartialPerson):
                     return False
@@ -170,17 +166,17 @@ class TestLazyFreeze(unittest.TestCase):
 
         # Create a person
         p = PartialPerson("Alice", 30, "Software Engineer")
-        
+
         # Take the hash
         h = hash(p)
-        
+
         # Try to modify protected attributes (should raise TypeError)
         with self.assertRaises(TypeError):
             p.name = "Bob"
-            
+
         with self.assertRaises(TypeError):
             p.age = 31
-            
+
         # Try to modify unprotected attribute (should work)
         p.description = "Senior Software Engineer"
         self.assertEqual(p.description, "Senior Software Engineer")

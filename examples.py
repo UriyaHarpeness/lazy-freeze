@@ -1,8 +1,4 @@
-#!/usr/bin/env python3
-"""
-Examples demonstrating the usage of the lazy_freeze decorator.
-"""
-
+from __future__ import annotations
 from lazy_freeze import lazy_freeze
 
 
@@ -25,26 +21,21 @@ class Person:
         return f"Person(name='{self.name}', age={self.age})"
 
 
-# Example 2: Dictionary-like class
+# Example 2: List-like class that becomes immutable after its hash is taken
 @lazy_freeze
-class CustomDict(dict):
-    """A dictionary that becomes immutable after its hash is taken."""
-
-    def __hash__(self):
-        # Custom hash for dictionary
-        return hash(tuple(sorted(self.items())))
+class CustomList(list):
+    def __hash__(self) -> int:  # type: ignore
+        return hash(tuple(self))
 
 
 # Example of class that inherits a custom hash method
 class ParentWithHash:
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(id(self))  # Simple hash but not object.__hash__
 
 
 @lazy_freeze
 class ChildWithInheritedHash(ParentWithHash):
-    """Class that inherits a hash method from its parent."""
-
     def __init__(self, value):
         self.value = value
 
@@ -55,8 +46,6 @@ class ChildWithInheritedHash(ParentWithHash):
 # Example of class with in-place operations
 @lazy_freeze
 class Counter:
-    """Demonstrates protection of in-place operations."""
-
     def __init__(self, value=0):
         self.value = value
 
@@ -89,8 +78,6 @@ class Counter:
 # Example of class with __delitem__ and __delattr__
 @lazy_freeze
 class AttributeContainer:
-    """Demonstrates protection of attribute and item deletion."""
-
     def __init__(self, **kwargs):
         self.items = {}
         for key, value in kwargs.items():
@@ -120,8 +107,6 @@ class AttributeContainer:
 # New example with debug=True parameter
 @lazy_freeze(debug=True)
 class DebugPerson:
-    """Class that demonstrates debug mode with stack traces."""
-
     def __init__(self, name, age):
         self.name = name
         self.age = age
@@ -138,11 +123,9 @@ class DebugPerson:
         return f"DebugPerson(name='{self.name}', age={self.age})"
 
 
-# Example with protected_attrs - only specific attributes are protected
-@lazy_freeze(protected_attrs=["name", "age"])
-class PartiallyProtectedPerson:
-    """Class that demonstrates selective attribute protection."""
-
+# Example with frozen_attrs - only specific attributes are frozen
+@lazy_freeze(freeze_attrs=["name", "age"])
+class PartiallyFrozenPerson:
     def __init__(self, name, age, description):
         self.name = name
         self.age = age
@@ -152,31 +135,18 @@ class PartiallyProtectedPerson:
         return hash((self.name, self.age))  # Only uses name and age
 
     def __eq__(self, other):
-        if not isinstance(other, PartiallyProtectedPerson):
+        if not isinstance(other, PartiallyFrozenPerson):
             return False
         return self.name == other.name and self.age == other.age
 
     def __repr__(self):
-        return f"PartiallyProtectedPerson(name='{self.name}', age={self.age}, description='{self.description}')"
-
-
-# Helpers for the demo
-
-def hash_object(obj):
-    """Hash an object and return the hash."""
-    return hash(obj)
-
-
-def modify_object(obj):
-    """Try to modify an object."""
-    obj.age = 999
+        return f"PartiallyFrozenPerson(name='{self.name}', age={self.age}, description='{self.description}')"
 
 
 # Regular demos
 
 def demonstrate_person():
-    """Demonstrate lazy freezing on a Person instance."""
-    print("\n=== Person Example ===")
+    print("\n=== Basic Person Example ===")
 
     # Create a person
     p = Person("Alice", 30)
@@ -199,36 +169,30 @@ def demonstrate_person():
         print(f"Exception when modifying after hash: {e}")
 
 
-def demonstrate_dict():
-    """Demonstrate lazy freezing on a dictionary-like object."""
-    print("\n=== Dictionary Example ===")
+def demonstrate_list():
+    print("\n=== List Example ===")
 
-    # Create a dictionary
-    d = CustomDict(a=1, b=2)
-    print(f"Created: {d}")
+    cl = CustomList([1, 2, 3, 4])
+    print(f"Created: {cl}")
 
     # Modify before hash
-    d["c"] = 3
-    print(f"Modified before hash: {d}")
+    cl[0] = 11
+    print(f"Modified before hash: {cl}")
 
     # Take the hash (this will set hash_taken=True)
-    h = hash(d)
-    print(f"Hash value: {h}")
-    print(f"hash_taken attribute: {getattr(d, 'hash_taken', False)}")
+    h = hash(cl)
 
     # Try to modify after hash
     try:
-        d["d"] = 4
-        print(f"Modified after hash: {d}")  # This should not execute
+        cl[0] = 14
+        print(f"Modified after hash: {cl}")  # This should not execute
     except TypeError as e:
         print(f"Exception when modifying after hash: {e}")
 
 
 def demonstrate_dict_usage():
-    """Demonstrate how lazy_freeze prevents issues with dictionaries."""
     print("\n=== Using in Dictionary ===")
 
-    # Create original people
     p1 = Person("Bob", 25)
     p2 = Person("Carol", 35)
 
@@ -255,7 +219,6 @@ def demonstrate_dict_usage():
 
 
 def demonstrate_inherited_hash():
-    """Demonstrate that inherited hash methods are accepted."""
     print("\n=== Inherited Hash Example ===")
 
     child = ChildWithInheritedHash(42)
@@ -265,7 +228,6 @@ def demonstrate_inherited_hash():
     print(f"Modified before hash: {child}")
 
     h = hash(child)  # This will set hash_taken
-    print(f"Hash value: {h}")
 
     try:
         child.value = 44
@@ -274,45 +236,7 @@ def demonstrate_inherited_hash():
         print(f"Exception when modifying: {e}")
 
 
-def demonstrate_hash_assertion():
-    """Demonstrate the assertion error with a class that doesn't have __hash__."""
-    print("\n=== Hash Assertion Example ===")
-
-    try:
-        # This will be executed at import time, so we need to define the class here
-        # to avoid breaking the whole module if it fails
-        exec("""
-class NoHashClass:
-    def __init__(self, value):
-        self.value = value
-
-# This should raise an AssertionError
-lazy_freeze(NoHashClass)
-        """)
-    except AssertionError as e:
-        print(f"Got expected AssertionError: {e}")
-
-    # Show that even with __eq__, we still need __hash__
-    try:
-        exec("""
-class HasEqButNoHash:
-    def __init__(self, value):
-        self.value = value
-
-    def __eq__(self, other):
-        if not isinstance(other, HasEqButNoHash):
-            return False
-        return self.value == other.value
-
-# This should also raise an AssertionError
-lazy_freeze(HasEqButNoHash)
-        """)
-    except AssertionError as e:
-        print(f"Got expected AssertionError: {e}")
-
-
 def demonstrate_inplace_operations():
-    """Demonstrate protection against in-place operations."""
     print("\n=== In-place Operations Example ===")
 
     # Create a counter
@@ -325,7 +249,6 @@ def demonstrate_inplace_operations():
 
     # Take the hash
     h = hash(c)
-    print(f"Hash value: {h}")
 
     # Try in-place operations after hash
     try:
@@ -342,7 +265,6 @@ def demonstrate_inplace_operations():
 
 
 def demonstrate_deletion():
-    """Demonstrate protection against attribute and item deletion."""
     print("\n=== Deletion Protection Example ===")
 
     # Create an attribute container
@@ -359,7 +281,6 @@ def demonstrate_deletion():
 
     # Take the hash
     h = hash(container)
-    print(f"Hash value: {h}")
 
     # Try deletions after hash
     try:
@@ -378,9 +299,8 @@ def demonstrate_deletion():
         print(f"Exception when deleting item: {e}")
 
 
-# New demo for debug mode
+# demo for debug mode with stack traces
 def demonstrate_debug_mode():
-    """Demonstrate debug mode with stack traces."""
     print("\n=== Debug Mode Example ===")
 
     # Create a debug person
@@ -393,25 +313,22 @@ def demonstrate_debug_mode():
 
     # Take the hash via a separate function to create a more interesting stack trace
     print("Taking hash in a separate function...")
-    h = hash_object(dp)
-    print(f"Hash value: {h}")
+    h = hash(dp)
 
     # Try to modify after hash via a separate function
     print("\nAttempting to modify after hash via separate function...")
     try:
-        modify_object(dp)
+        dp.age = 999
     except TypeError as e:
         print("Exception when modifying:")
         print(e)
 
 
-# New demo for protected_attrs
-def demonstrate_protected_attrs():
-    """Demonstrate the protected_attrs feature for selective attribute protection."""
-    print("\n=== Protected Attributes Example ===")
+def demonstrate_frozen_attrs():
+    print("\n=== Frozen Attributes Example ===")
 
-    # Create a partially protected person
-    p = PartiallyProtectedPerson("Alice", 30, "Software Engineer")
+    # Create a partially frozen person
+    p = PartiallyFrozenPerson("Alice", 30, "Software Engineer")
     print(f"Created: {p}")
 
     # Modify before hash
@@ -425,7 +342,7 @@ def demonstrate_protected_attrs():
     print(f"Hash value: {h}")
     print(f"hash_taken attribute: {getattr(p, 'hash_taken', False)}")
 
-    # Try to modify protected attributes after hash
+    # Try to modify frozen attributes after hash
     try:
         p.name = "Bob"
         print(f"Modified name after hash: {p}")  # This should not execute
@@ -438,17 +355,17 @@ def demonstrate_protected_attrs():
     except TypeError as e:
         print(f"Exception when modifying age after hash: {e}")
 
-    # Try to modify unprotected attribute after hash - this should work
+    # Try to modify unfrozen attribute after hash - this should work
     p.description = "Principal Software Engineer"
     print(f"Modified description after hash: {p}")  # This should execute
 
+
 if __name__ == "__main__":
     demonstrate_person()
-    demonstrate_dict()
+    demonstrate_list()
     demonstrate_dict_usage()
     demonstrate_inherited_hash()
-    demonstrate_hash_assertion()
     demonstrate_inplace_operations()
     demonstrate_deletion()
     demonstrate_debug_mode()
-    demonstrate_protected_attrs()  # New demo for protected attributes
+    demonstrate_frozen_attrs()

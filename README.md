@@ -11,7 +11,7 @@ A Python decorator that makes objects immutable after their hash is calculated.
 Clone this repository:
 
 ```bash
-git clone https://github.com/username/lazy-freeze.git
+git clone https://github.com/ofekshilon/lazy-freeze.git
 cd lazy-freeze
 ```
 

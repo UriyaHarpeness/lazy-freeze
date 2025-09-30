@@ -274,5 +274,49 @@ class TestLazyFreeze(unittest.TestCase):
         assert p.description == "Senior Software Engineer"
 
 
+    def test_freeze_attributes_4(self) -> None:
+        """Test that only specified attributes are frozen when using freeze_attrs."""
+        @lazy_freeze(freeze_attrs="dynamic", cache_hash=True)
+        class PartialPerson:
+            def __init__(self, name: str, age: int, description: str) -> None:
+                self.name = name
+                self.age = age
+                self.description = description  # Not used in hash
+
+            def __hash__(self) -> int:
+                if self.name == "Alice":
+                    return hash((self.name, self.age))
+                return hash((self.name, self.description))
+
+            def __eq__(self, other: object) -> bool:
+                if not isinstance(other, PartialPerson):
+                    return False
+                return self.name == other.name and self.age == other.age
+
+        # Create a person
+        p = PartialPerson("Alice", 30, "Software Engineer")
+        p2 = PartialPerson("Bob", 30, "Software Engineer")
+
+        # Take the hash
+        print(p.__dict__)
+
+        hash(p)
+        hash(p2)
+        hash(p2)
+
+        print(p.__dict__)
+
+        # Try to modify protected attributes (should raise RuntimeError)
+        with pytest.raises(RuntimeError):
+            p.name = "Bob"
+
+        with pytest.raises(RuntimeError):
+            p.age = 31
+
+        # Try to modify unprotected attribute (should work)
+        p.description = "Senior Software Engineer"
+        assert p.description == "Senior Software Engineer"
+
+
 if __name__ == "__main__":
     unittest.main()

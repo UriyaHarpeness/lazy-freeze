@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 from lazy_freeze import lazy_freeze
 
 
 # Example 1: Regular class with attributes
 @lazy_freeze
 class Person:
-    def __init__(self, name, age):
+    def __init__(self, name, age) -> None:
         self.name = name
         self.age = age
 
@@ -17,7 +18,7 @@ class Person:
             return False
         return self.name == other.name and self.age == other.age
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Person(name='{self.name}', age={self.age})"
 
 
@@ -36,17 +37,17 @@ class ParentWithHash:
 
 @lazy_freeze
 class ChildWithInheritedHash(ParentWithHash):
-    def __init__(self, value):
+    def __init__(self, value) -> None:
         self.value = value
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ChildWithInheritedHash(value={self.value})"
 
 
 # Example of class with in-place operations
 @lazy_freeze
 class Counter:
-    def __init__(self, value=0):
+    def __init__(self, value=0) -> None:
         self.value = value
 
     def __hash__(self):
@@ -71,14 +72,14 @@ class Counter:
             self.value -= other
         return self
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Counter(value={self.value})"
 
 
 # Example of class with __delitem__ and __delattr__
 @lazy_freeze
 class AttributeContainer:
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         self.items = {}
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -87,27 +88,27 @@ class AttributeContainer:
     def __hash__(self):
         # Hash based on sorted items
         attr_items = tuple(sorted((k, v)
-                           for k, v in self.__dict__.items() if k != 'items'))
+                           for k, v in self.__dict__.items() if k != "items"))
         return hash(attr_items)
 
-    def __delattr__(self, name):
+    def __delattr__(self, name) -> None:
         if name in self.__dict__:
             super().__delattr__(name)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key) -> None:
         if key in self.items:
             del self.items[key]
 
-    def __repr__(self):
-        attrs = ', '.join(f"{k}={v!r}" for k, v in self.__dict__.items()
-                          if k != 'items' and not k.startswith('_'))
+    def __repr__(self) -> str:
+        attrs = ", ".join(f"{k}={v!r}" for k, v in self.__dict__.items()
+                          if k != "items" and not k.startswith("_"))
         return f"AttributeContainer({attrs})"
 
 
 # New example with debug=True parameter
 @lazy_freeze(debug=True)
 class DebugPerson:
-    def __init__(self, name, age):
+    def __init__(self, name, age) -> None:
         self.name = name
         self.age = age
 
@@ -119,14 +120,14 @@ class DebugPerson:
             return False
         return self.name == other.name and self.age == other.age
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"DebugPerson(name='{self.name}', age={self.age})"
 
 
 # Example with frozen_attrs - only specific attributes are frozen
 @lazy_freeze(freeze_attrs=["name", "age"])
 class PartiallyFrozenPerson:
-    def __init__(self, name, age, description):
+    def __init__(self, name, age, description) -> None:
         self.name = name
         self.age = age
         self.description = description  # Not used in hash, can be modified after hash
@@ -139,13 +140,13 @@ class PartiallyFrozenPerson:
             return False
         return self.name == other.name and self.age == other.age
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"PartiallyFrozenPerson(name='{self.name}', age={self.age}, description='{self.description}')"
 
 
 # Regular demos
 
-def demonstrate_person():
+def demonstrate_person() -> None:
     print("\n=== Basic Person Example ===")
 
     # Create a person
@@ -169,7 +170,7 @@ def demonstrate_person():
         print(f"Exception when modifying after hash: {e}")
 
 
-def demonstrate_list():
+def demonstrate_list() -> None:
     print("\n=== List Example ===")
 
     cl = CustomList([1, 2, 3, 4])
@@ -190,7 +191,7 @@ def demonstrate_list():
         print(f"Exception when modifying after hash: {e}")
 
 
-def demonstrate_dict_usage():
+def demonstrate_dict_usage() -> None:
     print("\n=== Using in Dictionary ===")
 
     p1 = Person("Bob", 25)
@@ -218,7 +219,7 @@ def demonstrate_dict_usage():
     print(f"Looking up p3 (equivalent to original p1): {people_dict.get(p3)}")
 
 
-def demonstrate_inherited_hash():
+def demonstrate_inherited_hash() -> None:
     print("\n=== Inherited Hash Example ===")
 
     child = ChildWithInheritedHash(42)
@@ -236,7 +237,7 @@ def demonstrate_inherited_hash():
         print(f"Exception when modifying: {e}")
 
 
-def demonstrate_inplace_operations():
+def demonstrate_inplace_operations() -> None:
     print("\n=== In-place Operations Example ===")
 
     # Create a counter
@@ -264,7 +265,7 @@ def demonstrate_inplace_operations():
         print(f"Exception when using -=: {e}")
 
 
-def demonstrate_deletion():
+def demonstrate_deletion() -> None:
     print("\n=== Deletion Protection Example ===")
 
     # Create an attribute container
@@ -300,7 +301,7 @@ def demonstrate_deletion():
 
 
 # demo for debug mode with stack traces
-def demonstrate_debug_mode():
+def demonstrate_debug_mode() -> None:
     print("\n=== Debug Mode Example ===")
 
     # Create a debug person
@@ -327,7 +328,7 @@ def demonstrate_debug_mode():
         print(e)
 
 
-def demonstrate_frozen_attrs():
+def demonstrate_frozen_attrs() -> None:
     print("\n=== Frozen Attributes Example ===")
 
     # Create a partially frozen person

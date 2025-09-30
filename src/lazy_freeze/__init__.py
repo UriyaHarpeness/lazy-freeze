@@ -5,7 +5,7 @@ and other special methods of a class to prevent modifications after the object's
 has been calculated.
 """
 
-from ._decorator import lazy_freeze
+from src.lazy_freeze._decorator import lazy_freeze
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["lazy_freeze"]

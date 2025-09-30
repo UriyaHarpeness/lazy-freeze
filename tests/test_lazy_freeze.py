@@ -187,7 +187,6 @@ class TestLazyFreeze(unittest.TestCase):
         p.description = "Senior Software Engineer"
         assert p.description == "Senior Software Engineer"
 
-
     def test_freeze_attributes_2(self) -> None:
         """Test that only specified attributes are frozen when using freeze_attrs."""
         @lazy_freeze(freeze_attrs=frozenset({"name", "age"}))
@@ -230,7 +229,6 @@ class TestLazyFreeze(unittest.TestCase):
         p.description = "Senior Software Engineer"
         assert p.description == "Senior Software Engineer"
 
-
     def test_freeze_attributes_3(self) -> None:
         """Test that only specified attributes are frozen when using freeze_attrs."""
         @lazy_freeze(freeze_attrs="dynamic")
@@ -272,7 +270,6 @@ class TestLazyFreeze(unittest.TestCase):
         # Try to modify unprotected attribute (should work)
         p.description = "Senior Software Engineer"
         assert p.description == "Senior Software Engineer"
-
 
     def test_freeze_attributes_4(self) -> None:
         """Test that only specified attributes are frozen when using freeze_attrs."""

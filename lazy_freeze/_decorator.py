@@ -1,7 +1,7 @@
 import traceback
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, TypeVar, overload, Literal
+from typing import Any, Literal, TypeVar, overload
 
 __all__ = ["lazy_freeze"]
 
@@ -49,23 +49,23 @@ def make_protected_method(
     method_name: str,
     original_method: Callable,
     error_formatter: Callable,
-    freeze_attrs: frozenset[str],
     debug: bool,
 ) -> Callable:
     def protected_method(self: Any, *args: Any, **kwargs: Any) -> Any:
-        if hasattr(self, "__lazy_freeze_hash_taken") and self.__lazy_freeze_hash_taken:
-            # Check if we're only protecting specific attributes
-            # For __setattr__ and __delattr__, check if the attribute is protected
-            if freeze_attrs and method_name in CORE_MUTATING_OPERATORS:
-                attr_name = args[0] if args else None
-                if attr_name not in freeze_attrs:
-                    return original_method(self, *args, **kwargs)
+        if not getattr(self, "__lazy_freeze_hash_taken", False):
+            return original_method(self, *args, **kwargs)
 
-            # Generate the appropriate error message
-            op_msg = error_formatter(*args)
-            raise TypeError(get_error_message(self, debug=debug, operation=op_msg))
+        # For __setattr__ and __delattr__, check if the attribute is protected, the first argument is the attribute name
+        if (
+            method_name in CORE_MUTATING_OPERATORS
+            and (frozen_attrs := self.__lazy_freeze_frozen_attrs) != "all"
+            and args[0] not in frozen_attrs
+        ):
+            return original_method(self, *args, **kwargs)
 
-        return original_method(self, *args, **kwargs)
+        # Generate the appropriate error message
+        op_msg = error_formatter(*args)
+        raise RuntimeError(get_error_message(self, debug=debug, operation=op_msg))
 
     return protected_method
 
@@ -85,13 +85,46 @@ def ensure_freezable(cls: type[T]) -> None:
         raise TypeError(msg)
 
 
-def wrap_hash(*, debug: bool, original_hash: Callable[[T], int]) -> Callable[[T], int]:
+def create_methods_override(cls: type[T]) -> dict[str, tuple[Callable, Callable]]:
+    methods_override = {}
+
+    # Update core methods if the class has its own implementations
+    for op_name, error_formatter in CORE_MUTATING_OPERATORS.items():
+        methods_override[op_name] = (getattr(cls, op_name, getattr(object, op_name)), error_formatter)
+
+    # Only add optional operations that exist in the class
+    for op_name, error_formatter in OPTIONAL_MUTATING_OPERATORS.items():
+        if hasattr(cls, op_name):
+            methods_override[op_name] = (getattr(cls, op_name), error_formatter)
+
+    return methods_override
+
+
+def wrap_hash(
+    *,
+    debug: bool,
+    freeze_attrs: Literal["all", "dynamic"] | frozenset[str] | None,
+    original_hash: Callable[[T], int],
+) -> Callable[[T], int]:
     @wraps(original_hash)
     def patched_hash(self: T) -> int:
         """Calculate hash and mark the object as hash-taken. In debug mode, capture stack trace."""
-        object.__setattr__(self, "__lazy_freeze_taking_hash", True)
+        if freeze_attrs == "dynamic":
+            object.__setattr__(self, "__lazy_freeze_used_attributes", set())
+            object.__setattr__(self, "__lazy_freeze_taking_hash", True)
+
         hash_value = original_hash(self)
-        object.__delattr__(self, "__lazy_freeze_taking_hash")
+
+        if freeze_attrs == "dynamic":
+            object.__delattr__(self, "__lazy_freeze_taking_hash")
+            object.__setattr__(
+                self,
+                "__lazy_freeze_frozen_attrs",
+                frozenset(object.__getattribute__(self, "__lazy_freeze_used_attributes")),
+            )
+            object.__delattr__(self, "__lazy_freeze_used_attributes")
+        else:
+            object.__setattr__(self, "__lazy_freeze_frozen_attrs", freeze_attrs)
 
         # Use direct attribute setting to avoid recursion with cls.__setattr__
         object.__setattr__(self, "__lazy_freeze_hash_taken", True)
@@ -117,11 +150,6 @@ def wrap_getattribute(*, original_getattribute: Callable[[T, str], Any]) -> Call
         if not taking_hash:
             return original_getattribute(self, name)
 
-        try:
-            object.__getattribute__(self, "__lazy_freeze_used_attributes")
-        except AttributeError:
-            object.__setattr__(self, "__lazy_freeze_used_attributes", set())
-
         object.__getattribute__(self, "__lazy_freeze_used_attributes").add(name)
 
         return original_getattribute(self, name)
@@ -135,7 +163,7 @@ def lazy_freeze(
     /,
     *,
     debug: bool = False,
-    freeze_attrs: Literal["dynamic"] | frozenset[str] | None = None,
+    freeze_attrs: Literal["all", "dynamic"] | frozenset[str] | None = "all",
 ) -> Callable[[type[T]], type[T]]: ...
 
 
@@ -145,7 +173,7 @@ def lazy_freeze(
     /,
     *,
     debug: bool = False,
-    freeze_attrs: Literal["dynamic"] | frozenset[str] | None = None,
+    freeze_attrs: Literal["all", "dynamic"] | frozenset[str] | None = "all",
 ) -> type[T]: ...
 
 
@@ -154,7 +182,7 @@ def lazy_freeze(
     /,
     *,
     debug: bool = False,
-    freeze_attrs: Literal["dynamic"] | frozenset[str] | None = None,
+    freeze_attrs: Literal["all", "dynamic"] | frozenset[str] | None = "all",
 ) -> type[T] | Callable[[type[T]], type[T]]:
     """Class decorator that makes an object immutable after its hash is calculated.
 
@@ -176,22 +204,14 @@ def lazy_freeze(
     def decorator(cls: type[T]) -> type[T]:
         ensure_freezable(cls)
 
-        overridden_methods = {}
+        cls.__hash__ = wrap_hash(debug=debug, freeze_attrs=freeze_attrs, original_hash=cls.__hash__)
 
-        # Update core methods if the class has its own implementations
-        for op_name, error_formatter in CORE_MUTATING_OPERATORS.items():
-            overridden_methods[op_name] = (getattr(cls, op_name, getattr(object, op_name)), error_formatter)
-
-        # Only add optional operations that exist in the class
-        for op_name, error_formatter in OPTIONAL_MUTATING_OPERATORS.items():
-            if hasattr(cls, op_name):
-                overridden_methods[op_name] = (getattr(cls, op_name), error_formatter)
-
-        cls.__hash__ = wrap_hash(debug=debug, original_hash=cls.__hash__)
-        cls.__getattribute__ = wrap_getattribute(original_getattribute=cls.__getattribute__)
+        if freeze_attrs == "dynamic":
+            cls.__getattribute__ = wrap_getattribute(original_getattribute=cls.__getattribute__)
 
         # Create new methods for each mutating operation
-        for method_name, (original_method, error_formatter) in overridden_methods.items():
+        methods_override = create_methods_override(cls)
+        for method_name, (original_method, error_formatter) in methods_override.items():
             # Set the method on the class
             setattr(
                 cls,
@@ -200,7 +220,6 @@ def lazy_freeze(
                     method_name=method_name,
                     original_method=original_method,
                     error_formatter=error_formatter,
-                    freeze_attrs=freeze_attrs,
                     debug=debug,
                 ),
             )

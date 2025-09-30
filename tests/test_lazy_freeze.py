@@ -13,6 +13,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_basic_functionality(self) -> None:
         """Test that objects can be modified before hash but not after."""
+
         @lazy_freeze
         class Person:
             def __init__(self, name: str, age: int) -> None:
@@ -43,6 +44,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_debug_mode(self) -> None:
         """Test that debug mode captures stack trace."""
+
         @lazy_freeze(debug=True)
         class Person:
             def __init__(self, name: str, age: int) -> None:
@@ -68,6 +70,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_deletion_protection(self) -> None:
         """Test that attribute and item deletion are prevented after hash."""
+
         @lazy_freeze
         class Container(dict):
             def __init__(self, **kwargs: object) -> None:
@@ -98,6 +101,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_inplace_operations(self) -> None:
         """Test that in-place operations are prevented after hash."""
+
         @lazy_freeze
         class Counter:
             def __init__(self, value: int = 0) -> None:
@@ -131,6 +135,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_non_class_application(self) -> None:
         """Test that applying the decorator to a non-class entity raises TypeError."""
+
         # Define a simple function
         def sample_function(x):
             return x * 2
@@ -155,6 +160,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_freeze_attributes(self) -> None:
         """Test that only specified attributes are frozen when using freeze_attrs."""
+
         @lazy_freeze(freeze_attrs=frozenset({"name", "age"}))
         class PartialPerson:
             def __init__(self, name: str, age: int, description: str) -> None:
@@ -189,6 +195,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_freeze_attributes_2(self) -> None:
         """Test that only specified attributes are frozen when using freeze_attrs."""
+
         @lazy_freeze(freeze_attrs=frozenset({"name", "age"}))
         class PartialPerson:
             def __init__(self, name: str, age: int, description: str) -> None:
@@ -231,6 +238,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_freeze_attributes_3(self) -> None:
         """Test that only specified attributes are frozen when using freeze_attrs."""
+
         @lazy_freeze(freeze_attrs="dynamic")
         class PartialPerson:
             def __init__(self, name: str, age: int, description: str) -> None:
@@ -273,6 +281,7 @@ class TestLazyFreeze(unittest.TestCase):
 
     def test_freeze_attributes_4(self) -> None:
         """Test that only specified attributes are frozen when using freeze_attrs."""
+
         @lazy_freeze(freeze_attrs="dynamic", cache_hash=True)
         class PartialPerson:
             def __init__(self, name: str, age: int, description: str) -> None:

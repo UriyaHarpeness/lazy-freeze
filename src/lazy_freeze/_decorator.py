@@ -2,12 +2,25 @@
 
 import traceback
 from collections.abc import Callable
+from enum import Enum
 from functools import wraps
 from typing import Any, Literal, TypeVar, overload
 
 __all__ = ["lazy_freeze"]
 
 T = TypeVar("T")
+
+
+class SpecialAttributesNames(str, Enum):
+    """Names of special attributes set on the decorated class."""
+
+    CACHED_HASH = "__lazy_freeze_cached_hash"
+    FROZEN_ATTRS = "__lazy_freeze_frozen_attrs"
+    HASH_STACK_TRACE = "__lazy_freeze_hash_stack_trace"
+    HASH_TAKEN = "__lazy_freeze_hash_taken"
+    TAKING_HASH = "__lazy_freeze_taking_hash"
+    USED_ATTRS = "__lazy_freeze_used_attrs"
+
 
 # Core attribute mutation operations, always present via <object>.
 CORE_MUTATING_OPERATORS = {
@@ -38,10 +51,10 @@ OPTIONAL_MUTATING_OPERATORS = {
 
 def get_error_message(self: Any, *, debug: bool, operation: str) -> str:
     """Get the error message for a given operation, potentially with a traceback."""
-    if debug and hasattr(self, "__lazy_freeze_hash_stack_trace"):
+    if debug and hasattr(self, SpecialAttributesNames.HASH_STACK_TRACE):
         return (
             f"Cannot {operation} {self.__class__.__name__} after its hash has been taken.\n"
-            f"Hash was calculated at:\n{self.__lazy_freeze_hash_stack_trace}"  # pylint: disable=W0212
+            f"Hash was calculated at:\n{getattr(self, SpecialAttributesNames.HASH_STACK_TRACE)}"
         )
     return f"Cannot {operation} {self.__class__.__name__} after its hash has been taken"
 
@@ -57,14 +70,14 @@ def make_protected_operation(
 
     @wraps(original_operation)
     def protected_operation(self: Any, *args: Any, **kwargs: Any) -> Any:
-        if not getattr(self, "__lazy_freeze_hash_taken", False):
+        if not getattr(self, SpecialAttributesNames.HASH_TAKEN, False):
             return original_operation(self, *args, **kwargs)
 
         # For __setattr__ and __delattr__, check if the attribute is protected, the first argument is the attribute's
         # name.
         if (
             operation_name in CORE_MUTATING_OPERATORS
-            and (frozen_attrs := self.__lazy_freeze_frozen_attrs) != "all"  # pylint: disable=W0212
+            and (frozen_attrs := getattr(self, SpecialAttributesNames.FROZEN_ATTRS)) != "all"
             and args[0] not in frozen_attrs
         ):
             return original_operation(self, *args, **kwargs)
@@ -130,42 +143,42 @@ def wrap_hash(
         # If hash cached, return it.
         if cache_hash:
             try:
-                if object.__getattribute__(self, "__lazy_freeze_hash_taken"):
-                    return object.__getattribute__(self, "__lazy_freeze_cached_hash")
+                if object.__getattribute__(self, SpecialAttributesNames.HASH_TAKEN):
+                    return object.__getattribute__(self, SpecialAttributesNames.CACHED_HASH)
             except AttributeError:
                 pass
 
         # Setup for recording attributes used for hashing.
         if freeze_attrs == "dynamic":
-            object.__setattr__(self, "__lazy_freeze_used_attributes", set())
-            object.__setattr__(self, "__lazy_freeze_taking_hash", True)
+            object.__setattr__(self, SpecialAttributesNames.USED_ATTRS, set())
+            object.__setattr__(self, SpecialAttributesNames.TAKING_HASH, True)
 
         # Calculate hash.
         hash_value = original_hash(self)
 
         # Cache result if caching hash.
         if cache_hash:
-            object.__setattr__(self, "__lazy_freeze_cached_hash", hash_value)
+            object.__setattr__(self, SpecialAttributesNames.CACHED_HASH, hash_value)
 
         # Cleanup attributes recording and save the frozen attributes.
         if freeze_attrs == "dynamic":
-            object.__delattr__(self, "__lazy_freeze_taking_hash")
+            object.__delattr__(self, SpecialAttributesNames.TAKING_HASH)
             object.__setattr__(
                 self,
-                "__lazy_freeze_frozen_attrs",
-                frozenset(object.__getattribute__(self, "__lazy_freeze_used_attributes")),
+                SpecialAttributesNames.FROZEN_ATTRS,
+                frozenset(object.__getattribute__(self, SpecialAttributesNames.USED_ATTRS)),
             )
-            object.__delattr__(self, "__lazy_freeze_used_attributes")
+            object.__delattr__(self, SpecialAttributesNames.USED_ATTRS)
         else:
-            object.__setattr__(self, "__lazy_freeze_frozen_attrs", freeze_attrs)
+            object.__setattr__(self, SpecialAttributesNames.FROZEN_ATTRS, freeze_attrs)
 
         # Set hash-taken.
-        object.__setattr__(self, "__lazy_freeze_hash_taken", True)
+        object.__setattr__(self, SpecialAttributesNames.HASH_TAKEN, True)
 
         # Save traceback if debug used.
         if debug:
             stack_trace = "".join(traceback.format_stack()[:-1])  # Exclude current frame.
-            object.__setattr__(self, "__lazy_freeze_hash_stack_trace", stack_trace)
+            object.__setattr__(self, SpecialAttributesNames.HASH_STACK_TRACE, stack_trace)
 
         # Return result.
         return hash_value
@@ -181,14 +194,14 @@ def wrap_getattribute(*, original_getattribute: Callable[[T, str], Any]) -> Call
         """Get attribute and record the retrieved attributes used for calculating hash."""
         # Use direct attribute getting to avoid recursion with cls.__getattribute__.
         try:
-            taking_hash = object.__getattribute__(self, "__lazy_freeze_taking_hash")
+            taking_hash = object.__getattribute__(self, SpecialAttributesNames.TAKING_HASH)
         except AttributeError:
             taking_hash = False
 
         if not taking_hash:
             return original_getattribute(self, name)
 
-        object.__getattribute__(self, "__lazy_freeze_used_attributes").add(name)
+        object.__getattribute__(self, SpecialAttributesNames.USED_ATTRS).add(name)
 
         return original_getattribute(self, name)
 
